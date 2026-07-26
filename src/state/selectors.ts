@@ -79,7 +79,12 @@ function categoryLabelFor(id: string): string {
 }
 
 export function computeTripData(state: TripState): TripData {
-  const rates: Record<CurrencyCode, number> = { USD: 1, EUR: state.eurRate, GBP: state.gbpRate };
+  const rates: Record<CurrencyCode, number> = {
+    USD: 1,
+    EUR: state.eurRate,
+    GBP: state.gbpRate,
+    KWD: state.kwdRate,
+  };
 
   const enriched: EnrichedExpense[] = state.expenses.map((e) => {
     const amountUSD = e.amount * rates[e.currency];
@@ -132,7 +137,7 @@ export function computeTripData(state: TripState): TripData {
     .sort((a, b) => b.amount - a.amount)
     .map((p) => ({ id: p.id, name: p.name, amount: p.amount, pct: (p.amount / maxPaid) * 100 }));
 
-  const currencyCodes: CurrencyCode[] = ['USD', 'EUR', 'GBP'];
+  const currencyCodes: CurrencyCode[] = ['USD', 'EUR', 'GBP', 'KWD'];
   const currencyRows: CurrencyRow[] = currencyCodes
     .map((code) => {
       const rows = enriched.filter((e) => e.currency === code);

@@ -1,4 +1,4 @@
-import { CategoryDef, Expense, Traveler } from './types';
+import { CategoryDef, Expense, Traveler, Trip } from './types';
 
 export const DEFAULT_TRAVELERS: Traveler[] = [
   { id: 'you', name: 'You', initials: 'YO' },
@@ -44,3 +44,45 @@ export const DEFAULT_TRIP_NAME = 'Lisbon & Porto Crew';
 export const DEFAULT_TRIP_DATES = 'Aug 14–22, 2026';
 export const DEFAULT_EUR_RATE = 1.08;
 export const DEFAULT_GBP_RATE = 1.27;
+export const DEFAULT_KWD_RATE = 3.26;
+export const DEFAULT_TRIP_ID = 'trip-default';
+
+function defaultBudgets(): Record<string, number> {
+  return Object.fromEntries(CATEGORIES.map((c) => [c.id, c.budget]));
+}
+
+function zeroBudgets(): Record<string, number> {
+  return Object.fromEntries(CATEGORIES.map((c) => [c.id, 0]));
+}
+
+export function createDefaultTrip(): Trip {
+  return {
+    id: DEFAULT_TRIP_ID,
+    tripName: DEFAULT_TRIP_NAME,
+    tripDates: DEFAULT_TRIP_DATES,
+    travelers: DEFAULT_TRAVELERS,
+    categoryBudgets: defaultBudgets(),
+    expenses: SEED_EXPENSES,
+    settledKeys: [],
+    eurRate: DEFAULT_EUR_RATE,
+    gbpRate: DEFAULT_GBP_RATE,
+    kwdRate: DEFAULT_KWD_RATE,
+    showConversions: true,
+  };
+}
+
+export function createEmptyTrip(name = 'New Trip'): Trip {
+  return {
+    id: 'trip_' + Date.now(),
+    tripName: name,
+    tripDates: '',
+    travelers: [{ id: 'you', name: 'You', initials: 'YO' }],
+    categoryBudgets: zeroBudgets(),
+    expenses: [],
+    settledKeys: [],
+    eurRate: DEFAULT_EUR_RATE,
+    gbpRate: DEFAULT_GBP_RATE,
+    kwdRate: DEFAULT_KWD_RATE,
+    showConversions: true,
+  };
+}

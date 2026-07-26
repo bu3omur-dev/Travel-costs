@@ -1,4 +1,4 @@
-export type CurrencyCode = 'USD' | 'EUR' | 'GBP';
+export type CurrencyCode = 'USD' | 'EUR' | 'GBP' | 'KWD';
 
 export interface Traveler {
   id: string;
@@ -23,15 +23,29 @@ export interface Expense {
   date: string; // ISO yyyy-mm-dd
 }
 
-export interface TripState {
+export interface Trip {
+  id: string;
   tripName: string;
   tripDates: string;
   travelers: Traveler[];
   categoryBudgets: Record<string, number>;
   expenses: Expense[];
   settledKeys: string[];
-  darkMode: boolean;
   eurRate: number;
   gbpRate: number;
+  kwdRate: number;
   showConversions: boolean;
+}
+
+// The flattened view a screen sees: the active trip's fields plus the
+// app-wide dark mode preference, shaped like the old single-trip TripState
+// so screens can keep reading `state.tripName`, `state.travelers`, etc.
+export interface TripState extends Trip {
+  darkMode: boolean;
+}
+
+export interface AppState {
+  trips: Trip[];
+  activeTripId: string;
+  darkMode: boolean;
 }

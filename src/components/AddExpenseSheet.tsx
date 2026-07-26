@@ -13,7 +13,7 @@ import { CloseIcon } from './icons';
 import { FieldLabel, TextField } from './FormField';
 import { Sheet } from './Sheet';
 
-const CURRENCIES: CurrencyCode[] = ['USD', 'EUR', 'GBP'];
+const CURRENCIES: CurrencyCode[] = ['USD', 'EUR', 'GBP', 'KWD'];
 
 export function AddExpenseSheet() {
   const c = useColors();
