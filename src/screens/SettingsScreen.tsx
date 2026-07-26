@@ -108,29 +108,28 @@ export function SettingsScreen() {
           {trips.map((trip, i) => {
             const active = trip.id === activeTripId;
             return (
-              <Pressable
+              <View
                 key={trip.id}
-                onPress={() => switchTrip(trip.id)}
                 style={[
                   styles.tripRow,
                   i < trips.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.divider },
                   active && { backgroundColor: c.accentTint },
                 ]}
               >
-                <View style={styles.tripRowText}>
+                <Pressable style={styles.tripRowText} onPress={() => switchTrip(trip.id)} hitSlop={8}>
                   <Text style={[styles.travelerName, { color: active ? c.accentText : c.text }]}>
                     {trip.tripName || 'Untitled trip'}
                   </Text>
                   {trip.tripDates ? (
                     <Text style={[styles.tripDates, { color: c.neutral700 }]}>{trip.tripDates}</Text>
                   ) : null}
-                </View>
+                </Pressable>
                 {trips.length > 1 ? (
                   <Pressable onPress={() => confirmDeleteTrip(trip.id, trip.tripName)} hitSlop={8}>
                     <Text style={[styles.removeLabel, { color: c.accentText }]}>Delete</Text>
                   </Pressable>
                 ) : null}
-              </Pressable>
+              </View>
             );
           })}
         </View>

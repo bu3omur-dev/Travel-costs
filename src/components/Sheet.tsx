@@ -34,7 +34,11 @@ export function Sheet({
             },
           ]}
         >
-          <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.content}
+            keyboardShouldPersistTaps="handled"
+          >
             {children}
           </ScrollView>
         </View>

@@ -16,6 +16,7 @@ export function ScreenContainer({
         style={styles.flex}
         contentContainerStyle={{ padding: 18, paddingTop: 18, paddingHorizontal: 20, paddingBottom: contentBottomPadding }}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         {children}
       </ScrollView>
