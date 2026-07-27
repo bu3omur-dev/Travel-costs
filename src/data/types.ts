@@ -32,7 +32,10 @@ export interface Trip {
   travelers: Traveler[];
   categoryBudgets: Record<string, number>;
   expenses: Expense[];
-  settledKeys: string[];
+  // Settlement id -> the USD amount that was actually marked paid. Kept
+  // (rather than a plain string[]) so a settled payment can count toward
+  // the payer's total-paid figure on the Reports tab.
+  settledPayments: Record<string, number>;
   eurRate: number;
   gbpRate: number;
   kwdRate: number;

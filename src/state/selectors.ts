@@ -126,11 +126,15 @@ export function computeTripData(state: TripState): TripData {
 
   const settlements = simplifySettlements(balances);
 
-  const paidTotalsRaw = state.travelers.map((t) => ({
-    id: t.id,
-    name: t.name,
-    amount: enriched.filter((e) => e.payerId === t.id).reduce((a, e) => a + e.amountUSD, 0),
-  }));
+  // "Paid" totals include settlement payments the traveler has marked as
+  // settled (money they actually handed over), not just logged expenses.
+  const paidTotalsRaw = state.travelers.map((t) => {
+    const expensePaid = enriched.filter((e) => e.payerId === t.id).reduce((a, e) => a + e.amountUSD, 0);
+    const settlementPaid = settlements
+      .filter((s) => s.from.id === t.id && Object.prototype.hasOwnProperty.call(state.settledPayments, s.id))
+      .reduce((a, s) => a + (state.settledPayments[s.id] ?? s.amount), 0);
+    return { id: t.id, name: t.name, amount: expensePaid + settlementPaid };
+  });
   const maxPaid = Math.max(1, ...paidTotalsRaw.map((p) => p.amount));
   const paidRows: PaidRow[] = paidTotalsRaw
     .slice()
@@ -159,7 +163,9 @@ export function computeTripData(state: TripState): TripData {
   );
   const topSpender = paidRows[0];
   const topCategory = categoryRows.slice().sort((a, b) => b.spent - a.spent)[0];
-  const outstandingCount = settlements.filter((s) => !state.settledKeys.includes(s.id)).length;
+  const outstandingCount = settlements.filter(
+    (s) => !Object.prototype.hasOwnProperty.call(state.settledPayments, s.id)
+  ).length;
 
   const recap: Recap = {
     daysLabel: days + ' day' + (days === 1 ? '' : 's'),
@@ -184,7 +190,7 @@ export function computeTripData(state: TripState): TripData {
   if (settlements.length) {
     balancesLines.push('Suggested settlements:');
     settlements.forEach((s) => {
-      const settled = state.settledKeys.includes(s.id);
+      const settled = Object.prototype.hasOwnProperty.call(state.settledPayments, s.id);
       balancesLines.push('- ' + s.from.name + ' → ' + s.to.name + ': ' + usd(s.amount) + (settled ? ' (settled)' : ''));
     });
   } else {

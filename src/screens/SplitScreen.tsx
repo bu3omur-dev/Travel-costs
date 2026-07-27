@@ -54,7 +54,7 @@ export function SplitScreen() {
         <Text style={[styles.sectionTitle, styles.settlementsTitle, { color: c.text }]}>Suggested settlements</Text>
         <View style={styles.settlementsList}>
           {data.settlements.map((s) => {
-            const settled = state.settledKeys.includes(s.id);
+            const settled = Object.prototype.hasOwnProperty.call(state.settledPayments, s.id);
             return (
               <View
                 key={s.id}
@@ -74,7 +74,7 @@ export function SplitScreen() {
                   </Text>
                 </View>
                 <Pressable
-                  onPress={() => toggleSettled(s.id)}
+                  onPress={() => toggleSettled(s)}
                   style={[
                     styles.settleBtn,
                     {

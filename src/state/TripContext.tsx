@@ -4,6 +4,7 @@ import { Alert } from 'react-native';
 import { CATEGORIES } from '../data/seed';
 import { Expense, JoinedTrip, LocalState, Traveler, Trip, TripState } from '../data/types';
 import { addExpenseToTrip, addTravelerToTrip, createTrip, fetchTrip, subscribeToTrip, updateTripFields } from '../firebase/tripsApi';
+import { Settlement } from '../utils/settlements';
 
 const STORAGE_KEY = 'trip-expense-tracker/local-state/v3';
 
@@ -71,7 +72,7 @@ interface TripContextValue {
   removeTraveler: (id: string) => void;
   setCategoryBudget: (categoryId: string, value: number) => void;
   addExpense: (expense: NewExpenseInput) => void;
-  toggleSettled: (id: string) => void;
+  toggleSettled: (settlement: Settlement) => void;
   resetSettled: () => void;
   resetTrip: () => void;
   setEurRate: (value: number) => void;
@@ -195,20 +196,28 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
         const t = current();
         addExpenseToTrip(t.id, expense, t.expenses).catch(reportError);
       },
-      toggleSettled: (id) => {
+      toggleSettled: (settlement) => {
         const t = current();
-        const has = t.settledKeys.includes(id);
-        updateTripFields(t.id, {
-          settledKeys: has ? t.settledKeys.filter((k) => k !== id) : [...t.settledKeys, id],
-        }).catch(reportError);
+        const has = Object.prototype.hasOwnProperty.call(t.settledPayments, settlement.id);
+        if (has) {
+          const rest = { ...t.settledPayments };
+          delete rest[settlement.id];
+          updateTripFields(t.id, { settledPayments: rest }).catch(reportError);
+        } else {
+          updateTripFields(t.id, {
+            settledPayments: { ...t.settledPayments, [settlement.id]: settlement.amount },
+          }).catch(reportError);
+        }
       },
       resetSettled: () => {
-        updateTripFields(current().id, { settledKeys: [] }).catch(reportError);
+        updateTripFields(current().id, { settledPayments: {} }).catch(reportError);
       },
       resetTrip: () => {
-        updateTripFields(current().id, { categoryBudgets: zeroBudgets(), expenses: [], settledKeys: [] }).catch(
-          reportError
-        );
+        updateTripFields(current().id, {
+          categoryBudgets: zeroBudgets(),
+          expenses: [],
+          settledPayments: {},
+        }).catch(reportError);
       },
       setEurRate: (v) => updateTripFields(current().id, { eurRate: v }).catch(reportError),
       setGbpRate: (v) => updateTripFields(current().id, { gbpRate: v }).catch(reportError),
