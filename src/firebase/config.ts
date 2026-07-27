@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 
 // Fill these in from your Firebase project settings:
 // Firebase Console -> Project settings (gear icon) -> General ->
@@ -17,4 +17,10 @@ const firebaseConfig = {
 };
 
 export const firebaseApp = initializeApp(firebaseConfig);
-export const db = getFirestore(firebaseApp);
+// React Native's networking stack doesn't support the streaming transport
+// Firestore uses by default (that's a browser-only mechanism) — without
+// forcing long-polling, writes/listens silently queue locally and never
+// actually reach the server, even though the app looks like it's working.
+export const db = initializeFirestore(firebaseApp, {
+  experimentalForceLongPolling: true,
+});
