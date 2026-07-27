@@ -9,7 +9,8 @@ import { GearIcon, MoonIcon, SunIcon } from './icons';
 export function TopBar({ onOpenSettings }: { onOpenSettings: () => void }) {
   const c = useColors();
   const insets = useSafeAreaInsets();
-  const { state, toggleDarkMode } = useTrip();
+  const { state: rawState, darkMode, toggleDarkMode } = useTrip();
+  const state = rawState!;
 
   return (
     <View
@@ -33,7 +34,7 @@ export function TopBar({ onOpenSettings }: { onOpenSettings: () => void }) {
             hitSlop={8}
             style={[styles.iconButton, { borderColor: c.divider }]}
           >
-            {state.darkMode ? <MoonIcon color={c.text} /> : <SunIcon color={c.text} />}
+            {darkMode ? <MoonIcon color={c.text} /> : <SunIcon color={c.text} />}
           </Pressable>
         </View>
       </View>

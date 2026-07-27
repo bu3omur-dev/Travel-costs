@@ -18,26 +18,28 @@ const CURRENCIES: CurrencyCode[] = ['USD', 'EUR', 'GBP', 'KWD'];
 export function AddExpenseSheet() {
   const c = useColors();
   const { showAddSheet, closeAdd, setExpensesFilter } = useUi();
-  const { state, addExpense } = useTrip();
+  const { state, myTravelerId, addExpense } = useTrip();
 
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState<CurrencyCode>('EUR');
   const [category, setCategory] = useState('food');
-  const [payerId, setPayerId] = useState('you');
-  const [participantIds, setParticipantIds] = useState<string[]>(state.travelers.map((t) => t.id));
+  const [payerId, setPayerId] = useState(myTravelerId ?? '');
+  const [participantIds, setParticipantIds] = useState<string[]>(state?.travelers.map((t) => t.id) ?? []);
 
   useEffect(() => {
-    if (showAddSheet) {
+    if (showAddSheet && state) {
       setDescription('');
       setAmount('');
       setCurrency('EUR');
       setCategory('food');
-      setPayerId('you');
+      setPayerId(myTravelerId ?? state.travelers[0]?.id ?? '');
       setParticipantIds(state.travelers.map((t) => t.id));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showAddSheet]);
+
+  if (!state) return null;
 
   const amountNum = parseFloat(amount) || 0;
   const canSubmit = description.trim().length > 0 && amountNum > 0 && participantIds.length > 0;

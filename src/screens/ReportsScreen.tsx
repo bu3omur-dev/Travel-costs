@@ -14,7 +14,8 @@ import { usd } from '../utils/format';
 
 export function ReportsScreen() {
   const c = useColors();
-  const { state } = useTrip();
+  const { state: rawState } = useTrip();
+  const state = rawState!;
   const data = useTripData(state);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 

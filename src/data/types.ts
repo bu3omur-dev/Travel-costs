@@ -9,7 +9,6 @@ export interface Traveler {
 export interface CategoryDef {
   id: string;
   label: string;
-  budget: number;
 }
 
 export interface Expense {
@@ -23,6 +22,9 @@ export interface Expense {
   date: string; // ISO yyyy-mm-dd
 }
 
+// A trip's shared, cloud-synced data — this is the shape of each Firestore
+// document in the `trips` collection. `id` is the doc ID, which doubles as
+// the shareable join code.
 export interface Trip {
   id: string;
   tripName: string;
@@ -38,14 +40,24 @@ export interface Trip {
 }
 
 // The flattened view a screen sees: the active trip's fields plus the
-// app-wide dark mode preference, shaped like the old single-trip TripState
-// so screens can keep reading `state.tripName`, `state.travelers`, etc.
+// app-wide dark mode preference, so screens can keep reading
+// `state.tripName`, `state.travelers`, etc.
 export interface TripState extends Trip {
   darkMode: boolean;
 }
 
-export interface AppState {
-  trips: Trip[];
-  activeTripId: string;
+// A trip this device has joined — kept locally so re-opening the app
+// doesn't require re-entering the join code, and so the app remembers
+// which traveler in that trip is "me" on this device.
+export interface JoinedTrip {
+  tripId: string;
+  myTravelerId: string;
+}
+
+// Everything that lives only on this device (AsyncStorage) rather than in
+// the shared Firestore trip document.
+export interface LocalState {
   darkMode: boolean;
+  joinedTrips: JoinedTrip[];
+  activeTripId: string | null;
 }

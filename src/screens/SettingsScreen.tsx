@@ -1,5 +1,6 @@
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import * as Clipboard from 'expo-clipboard';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Avatar } from '../components/Avatar';
@@ -8,9 +9,11 @@ import { FieldLabel, TextField } from '../components/FormField';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { Toggle } from '../components/Toggle';
 import { TopBar } from '../components/TopBar';
-import { CATEGORIES, DEFAULT_TRIP_ID } from '../data/seed';
+import { CATEGORIES } from '../data/seed';
+import { fetchTrip } from '../firebase/tripsApi';
 import { RootStackParamList } from '../navigation/types';
 import { useTrip } from '../state/TripContext';
+import { useUi } from '../state/UiContext';
 import { useColors } from '../theme/ThemeContext';
 import { fonts, fontSize } from '../theme/typography';
 import { usd } from '../utils/format';
@@ -19,8 +22,9 @@ export function SettingsScreen() {
   const c = useColors();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const {
-    state,
-    trips,
+    state: rawState,
+    myTravelerId,
+    joinedTrips,
     activeTripId,
     setTripName,
     setTripDates,
@@ -28,19 +32,23 @@ export function SettingsScreen() {
     removeTraveler,
     setCategoryBudget,
     resetSettled,
-    restoreDefaults,
+    resetTrip,
     setEurRate,
     setGbpRate,
     setKwdRate,
     setShowConversions,
-    addTrip,
-    deleteTrip,
+    leaveTrip,
     switchTrip,
   } = useTrip();
+  const state = rawState!;
+  const { openTripPicker } = useUi();
+
   const [newTravelerName, setNewTravelerName] = useState('');
   const [eurRateText, setEurRateText] = useState(String(state.eurRate));
   const [gbpRateText, setGbpRateText] = useState(String(state.gbpRate));
   const [kwdRateText, setKwdRateText] = useState(String(state.kwdRate));
+  const [tripNames, setTripNames] = useState<Record<string, string>>({});
+  const [codeCopied, setCodeCopied] = useState(false);
 
   useEffect(() => {
     setEurRateText(String(state.eurRate));
@@ -51,6 +59,23 @@ export function SettingsScreen() {
   useEffect(() => {
     setKwdRateText(String(state.kwdRate));
   }, [state.kwdRate]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const others = joinedTrips.filter((j) => j.tripId !== activeTripId);
+    (async () => {
+      const entries = await Promise.all(
+        others.map(async (j) => {
+          const t = await fetchTrip(j.tripId).catch(() => null);
+          return [j.tripId, t?.tripName || 'Untitled trip'] as const;
+        })
+      );
+      if (!cancelled) setTripNames(Object.fromEntries(entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [joinedTrips, activeTripId]);
 
   const payerIds = useMemo(() => new Set(state.expenses.map((e) => e.payerId)), [state.expenses]);
   const totalBudget = CATEGORIES.reduce((a, cat) => a + (state.categoryBudgets[cat.id] ?? 0), 0);
@@ -66,32 +91,30 @@ export function SettingsScreen() {
     setRate(Number.isFinite(v) && v > 0 ? v : fallback);
   }
 
-  function confirmDeleteTrip(id: string, name: string) {
+  function confirmLeaveTrip(id: string, name: string) {
     Alert.alert(
-      `Delete "${name || 'Untitled trip'}"?`,
-      'This permanently removes the trip and all of its expenses. This cannot be undone.',
+      `Leave "${name || 'Untitled trip'}"?`,
+      'You can rejoin later with the trip code. This only removes it from this device — nothing is deleted for the rest of the group.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => deleteTrip(id) },
+        { text: 'Leave', style: 'destructive', onPress: () => leaveTrip(id) },
       ]
     );
   }
 
-  const isDefaultTrip = activeTripId === DEFAULT_TRIP_ID;
+  async function handleCopyCode() {
+    await Clipboard.setStringAsync(state.id);
+    setCodeCopied(true);
+    setTimeout(() => setCodeCopied(false), 1500);
+  }
 
-  function confirmRestoreDefaults() {
+  function confirmResetTrip() {
     Alert.alert(
-      isDefaultTrip ? 'Restore default trip data?' : 'Reset this trip?',
-      isDefaultTrip
-        ? 'This replaces travelers, expenses, budgets and settlement status with the original demo trip. This cannot be undone.'
-        : 'This clears all expenses, budgets and settlement status for this trip. Travelers are kept. This cannot be undone.',
+      'Reset this trip?',
+      'This clears all expenses, budgets and settlement status for this trip. Travelers are kept. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: isDefaultTrip ? 'Restore' : 'Reset',
-          style: 'destructive',
-          onPress: () => restoreDefaults(),
-        },
+        { text: 'Reset', style: 'destructive', onPress: () => resetTrip() },
       ]
     );
   }
@@ -103,38 +126,46 @@ export function SettingsScreen() {
         <BackRow onPress={() => navigation.goBack()} />
         <Text style={[styles.title, { color: c.text }]}>Trip settings</Text>
 
-        <Text style={[styles.sectionTitle, { color: c.text }]}>Your trips</Text>
+        <Text style={[styles.sectionTitle, { color: c.text }]}>Share this trip</Text>
+        <View style={[styles.codeBox, { borderColor: c.divider }]}>
+          <View style={styles.codeText}>
+            <Text style={[styles.codeKicker, { color: c.neutral700 }]}>Trip code</Text>
+            <Text style={[styles.codeValue, { color: c.text }]}>{state.id}</Text>
+          </View>
+          <Pressable onPress={handleCopyCode} style={[styles.copyBtn, { borderColor: c.text }]}>
+            <Text style={[styles.copyBtnLabel, { color: c.text }]}>{codeCopied ? 'Copied!' : 'Copy'}</Text>
+          </Pressable>
+        </View>
+        <Text style={[styles.codeHint, { color: c.neutral700 }]}>
+          Anyone with this code can view and add expenses to this trip.
+        </Text>
+
+        <Text style={[styles.sectionTitle, styles.sectionSpacer, { color: c.text }]}>Your trips</Text>
         <View style={[styles.travelerList, { borderColor: c.divider }]}>
-          {trips.map((trip, i) => {
-            const active = trip.id === activeTripId;
+          {joinedTrips.map((j, i) => {
+            const active = j.tripId === activeTripId;
+            const name = active ? state.tripName || 'Untitled trip' : tripNames[j.tripId] ?? 'Loading…';
             return (
               <View
-                key={trip.id}
+                key={j.tripId}
                 style={[
                   styles.tripRow,
-                  i < trips.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.divider },
+                  i < joinedTrips.length - 1 && { borderBottomWidth: 1, borderBottomColor: c.divider },
                   active && { backgroundColor: c.accentTint },
                 ]}
               >
-                <Pressable style={styles.tripRowText} onPress={() => switchTrip(trip.id)} hitSlop={8}>
-                  <Text style={[styles.travelerName, { color: active ? c.accentText : c.text }]}>
-                    {trip.tripName || 'Untitled trip'}
-                  </Text>
-                  {trip.tripDates ? (
-                    <Text style={[styles.tripDates, { color: c.neutral700 }]}>{trip.tripDates}</Text>
-                  ) : null}
+                <Pressable style={styles.tripRowText} onPress={() => switchTrip(j.tripId)} hitSlop={8}>
+                  <Text style={[styles.travelerName, { color: active ? c.accentText : c.text }]}>{name}</Text>
                 </Pressable>
-                {trips.length > 1 ? (
-                  <Pressable onPress={() => confirmDeleteTrip(trip.id, trip.tripName)} hitSlop={8}>
-                    <Text style={[styles.removeLabel, { color: c.accentText }]}>Delete</Text>
-                  </Pressable>
-                ) : null}
+                <Pressable onPress={() => confirmLeaveTrip(j.tripId, name)} hitSlop={8}>
+                  <Text style={[styles.removeLabel, { color: c.accentText }]}>Leave</Text>
+                </Pressable>
               </View>
             );
           })}
         </View>
-        <Pressable onPress={addTrip} style={[styles.dataBtn, styles.addTripBtn, { borderColor: c.accent }]}>
-          <Text style={[styles.dataBtnLabel, { color: c.accentText }]}>+ Add new trip</Text>
+        <Pressable onPress={openTripPicker} style={[styles.dataBtn, styles.addTripBtn, { borderColor: c.accent }]}>
+          <Text style={[styles.dataBtnLabel, { color: c.accentText }]}>+ Create or join another trip</Text>
         </Pressable>
 
         <View style={styles.field}>
@@ -149,7 +180,7 @@ export function SettingsScreen() {
         <Text style={[styles.sectionTitle, { color: c.text }]}>Travelers</Text>
         <View style={[styles.travelerList, { borderColor: c.divider }]}>
           {state.travelers.map((t, i) => {
-            const canRemove = t.id !== 'you' && !payerIds.has(t.id) && state.travelers.length > 1;
+            const canRemove = t.id !== myTravelerId && !payerIds.has(t.id) && state.travelers.length > 1;
             return (
               <View
                 key={t.id}
@@ -159,7 +190,7 @@ export function SettingsScreen() {
                 ]}
               >
                 <View style={styles.travelerLeft}>
-                  <Avatar initials={t.initials} isYou={t.id === 'you'} size={26} />
+                  <Avatar initials={t.initials} isYou={t.id === myTravelerId} size={26} />
                   <Text style={[styles.travelerName, { color: c.text }]}>{t.name}</Text>
                 </View>
                 {canRemove ? (
@@ -258,10 +289,8 @@ export function SettingsScreen() {
         <Pressable onPress={resetSettled} style={[styles.dataBtn, { borderColor: c.divider }]}>
           <Text style={[styles.dataBtnLabel, { color: c.text }]}>Clear all settled markers</Text>
         </Pressable>
-        <Pressable onPress={confirmRestoreDefaults} style={[styles.dataBtn, styles.dataBtnDanger, { borderColor: c.accent }]}>
-          <Text style={[styles.dataBtnLabel, { color: c.accentText }]}>
-            {isDefaultTrip ? 'Restore default trip data' : 'Reset this trip'}
-          </Text>
+        <Pressable onPress={confirmResetTrip} style={[styles.dataBtn, styles.dataBtnDanger, { borderColor: c.accent }]}>
+          <Text style={[styles.dataBtnLabel, { color: c.accentText }]}>Reset this trip</Text>
         </Pressable>
       </ScreenContainer>
     </View>
@@ -275,10 +304,23 @@ const styles = StyleSheet.create({
   fieldGap: { marginBottom: 22 },
   sectionTitle: { fontFamily: fonts.bold, fontSize: fontSize.sectionTitle, marginBottom: 10 },
   sectionSpacer: { marginTop: 4 },
+  codeBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    padding: 12,
+    paddingHorizontal: 14,
+  },
+  codeText: {},
+  codeKicker: { fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.9, marginBottom: 2 },
+  codeValue: { fontFamily: fonts.bold, fontSize: fontSize.sectionTitle, letterSpacing: 1.5 },
+  copyBtn: { borderWidth: 1, paddingVertical: 8, paddingHorizontal: 14 },
+  copyBtnLabel: { fontFamily: fonts.semibold, fontSize: fontSize.small },
+  codeHint: { fontSize: fontSize.tiny, marginTop: 6, marginBottom: 20 },
   travelerList: { borderWidth: 1, marginBottom: 10 },
   tripRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, paddingHorizontal: 12 },
   tripRowText: { flex: 1 },
-  tripDates: { fontSize: fontSize.tiny, marginTop: 2 },
   addTripBtn: { marginBottom: 24 },
   travelerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 10, paddingHorizontal: 12 },
   travelerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },

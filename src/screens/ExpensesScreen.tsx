@@ -20,10 +20,13 @@ const FILTERS = [{ id: 'all', label: 'All' }, ...CATEGORIES.map((c) => ({ id: c.
 
 export function ExpensesScreen() {
   const c = useColors();
-  const { state } = useTrip();
-  const data = useTripData(state);
+  // Screens under the main navigator only ever mount once a trip is loaded
+  // (see App.tsx's gate), so `state` is guaranteed non-null here.
+  const { state: rawState, myTravelerId } = useTrip();
+  const state = rawState!;
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { expensesFilter: filterCategory, setExpensesFilter: setFilterCategory } = useUi();
+  const data = useTripData(state);
 
   const filtered = useMemo(() => {
     return data.enriched
@@ -45,7 +48,7 @@ export function ExpensesScreen() {
           {filtered.map((e, i) => (
             <BorderedRow key={e.id} last={i === filtered.length - 1} style={styles.row}>
               <View style={styles.left}>
-                <Avatar initials={e.payer.initials} isYou={e.payerId === 'you'} size={30} />
+                <Avatar initials={e.payer.initials} isYou={e.payerId === myTravelerId} size={30} />
                 <View style={styles.textCol}>
                   <Text style={[styles.desc, { color: c.text }]}>{e.description}</Text>
                   <Text style={[styles.meta, { color: c.neutral700 }]}>

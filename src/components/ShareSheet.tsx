@@ -11,13 +11,15 @@ import { Sheet } from './Sheet';
 
 export function ShareSheet() {
   const c = useColors();
-  const { state } = useTrip();
+  const { state: rawState } = useTrip();
+  const state = rawState!;
   const data = useTripData(state);
   const { showShareSheet, closeShare, shareMode } = useUi();
   const [copied, setCopied] = useState(false);
 
   const title = shareMode === 'recap' ? 'Share recap' : 'Share balances';
-  const shareText = shareMode === 'recap' ? data.recapShareText : data.balancesShareText;
+  const baseShareText = shareMode === 'recap' ? data.recapShareText : data.balancesShareText;
+  const shareText = baseShareText + '\n\nJoin this trip: code ' + state.id;
 
   useEffect(() => {
     if (showShareSheet) setCopied(false);

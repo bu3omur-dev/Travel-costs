@@ -17,7 +17,8 @@ import { usd } from '../utils/format';
 
 export function SplitScreen() {
   const c = useColors();
-  const { state, toggleSettled } = useTrip();
+  const { state: rawState, myTravelerId, toggleSettled } = useTrip();
+  const state = rawState!;
   const data = useTripData(state);
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { openShare } = useUi();
@@ -41,7 +42,7 @@ export function SplitScreen() {
             return (
               <BorderedRow key={b.id} last={i === data.balances.length - 1}>
                 <View style={styles.travelerLeft}>
-                  <Avatar initials={b.initials} isYou={b.id === 'you'} />
+                  <Avatar initials={b.initials} isYou={b.id === myTravelerId} />
                   <Text style={[styles.travelerName, { color: c.text }]}>{b.name}</Text>
                 </View>
                 <Text style={[styles.netLabel, { color: netColor }]}>{netLabel}</Text>

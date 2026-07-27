@@ -1,155 +1,70 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
-import { CATEGORIES, createDefaultTrip, createEmptyTrip } from '../data/seed';
-import { AppState, Expense, Traveler, Trip, TripState } from '../data/types';
+import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef, useState } from 'react';
+import { Alert } from 'react-native';
+import { CATEGORIES } from '../data/seed';
+import { Expense, JoinedTrip, LocalState, Traveler, Trip, TripState } from '../data/types';
+import { addExpenseToTrip, addTravelerToTrip, createTrip, fetchTrip, subscribeToTrip, updateTripFields } from '../firebase/tripsApi';
 
-const STORAGE_KEY = 'trip-expense-tracker/state/v2';
+const STORAGE_KEY = 'trip-expense-tracker/local-state/v3';
 
-function defaultBudgets(): Record<string, number> {
-  return Object.fromEntries(CATEGORIES.map((c) => [c.id, c.budget]));
+function zeroBudgets(): Record<string, number> {
+  return Object.fromEntries(CATEGORIES.map((c) => [c.id, 0]));
 }
 
-export function defaultAppState(): AppState {
-  const trip = createDefaultTrip();
-  return {
-    trips: [trip],
-    activeTripId: trip.id,
-    darkMode: false,
-  };
+export function defaultLocalState(): LocalState {
+  return { darkMode: false, joinedTrips: [], activeTripId: null };
 }
 
-function updateTrip(trips: Trip[], id: string, updater: (t: Trip) => Trip): Trip[] {
-  return trips.map((t) => (t.id === id ? updater(t) : t));
-}
-
-export type NewExpenseInput = Omit<Expense, 'id' | 'date'>;
-
-type Action =
-  | { type: 'hydrate'; state: AppState }
-  | { type: 'setTripName'; name: string }
-  | { type: 'setTripDates'; dates: string }
-  | { type: 'addTraveler'; name: string }
-  | { type: 'removeTraveler'; id: string }
-  | { type: 'setCategoryBudget'; categoryId: string; value: number }
-  | { type: 'addExpense'; expense: NewExpenseInput }
-  | { type: 'toggleSettled'; id: string }
-  | { type: 'resetSettled' }
-  | { type: 'restoreDefaults' }
+type LocalAction =
+  | { type: 'hydrate'; state: LocalState }
   | { type: 'toggleDarkMode' }
-  | { type: 'setEurRate'; value: number }
-  | { type: 'setGbpRate'; value: number }
-  | { type: 'setKwdRate'; value: number }
-  | { type: 'setShowConversions'; value: boolean }
-  | { type: 'addTrip' }
-  | { type: 'deleteTrip'; id: string }
-  | { type: 'switchTrip'; id: string };
+  | { type: 'setActiveTrip'; tripId: string | null }
+  | { type: 'upsertJoinedTrip'; tripId: string; myTravelerId: string }
+  | { type: 'removeJoinedTrip'; tripId: string };
 
-function reducer(state: AppState, action: Action): AppState {
-  const activeId = state.activeTripId;
-
+function reducer(state: LocalState, action: LocalAction): LocalState {
   switch (action.type) {
     case 'hydrate':
       return action.state;
-    case 'setTripName':
-      return { ...state, trips: updateTrip(state.trips, activeId, (t) => ({ ...t, tripName: action.name })) };
-    case 'setTripDates':
-      return { ...state, trips: updateTrip(state.trips, activeId, (t) => ({ ...t, tripDates: action.dates })) };
-    case 'addTraveler': {
-      const name = action.name.trim();
-      if (!name) return state;
-      const initials = name.slice(0, 2).toUpperCase();
-      const id = name.toLowerCase().replace(/[^a-z0-9]/g, '') + '_' + Date.now();
-      const traveler: Traveler = { id, name, initials };
-      return {
-        ...state,
-        trips: updateTrip(state.trips, activeId, (t) => ({ ...t, travelers: [...t.travelers, traveler] })),
-      };
-    }
-    case 'removeTraveler':
-      return {
-        ...state,
-        trips: updateTrip(state.trips, activeId, (t) => ({
-          ...t,
-          travelers: t.travelers.filter((tt) => tt.id !== action.id),
-        })),
-      };
-    case 'setCategoryBudget':
-      return {
-        ...state,
-        trips: updateTrip(state.trips, activeId, (t) => ({
-          ...t,
-          categoryBudgets: { ...t.categoryBudgets, [action.categoryId]: action.value },
-        })),
-      };
-    case 'addExpense': {
-      const expense: Expense = {
-        ...action.expense,
-        id: 'e' + Date.now(),
-        date: new Date().toISOString().slice(0, 10),
-      };
-      return {
-        ...state,
-        trips: updateTrip(state.trips, activeId, (t) => ({ ...t, expenses: [...t.expenses, expense] })),
-      };
-    }
-    case 'toggleSettled':
-      return {
-        ...state,
-        trips: updateTrip(state.trips, activeId, (t) => ({
-          ...t,
-          settledKeys: t.settledKeys.includes(action.id)
-            ? t.settledKeys.filter((k) => k !== action.id)
-            : [...t.settledKeys, action.id],
-        })),
-      };
-    case 'resetSettled':
-      return { ...state, trips: updateTrip(state.trips, activeId, (t) => ({ ...t, settledKeys: [] })) };
-    case 'restoreDefaults': {
-      const isDefaultTrip = activeId === createDefaultTrip().id;
-      return {
-        ...state,
-        trips: updateTrip(state.trips, activeId, (t) =>
-          isDefaultTrip
-            ? createDefaultTrip()
-            : { ...t, categoryBudgets: defaultBudgets(), expenses: [], settledKeys: [] }
-        ),
-      };
-    }
     case 'toggleDarkMode':
       return { ...state, darkMode: !state.darkMode };
-    case 'setEurRate':
-      return { ...state, trips: updateTrip(state.trips, activeId, (t) => ({ ...t, eurRate: action.value })) };
-    case 'setGbpRate':
-      return { ...state, trips: updateTrip(state.trips, activeId, (t) => ({ ...t, gbpRate: action.value })) };
-    case 'setKwdRate':
-      return { ...state, trips: updateTrip(state.trips, activeId, (t) => ({ ...t, kwdRate: action.value })) };
-    case 'setShowConversions':
-      return {
-        ...state,
-        trips: updateTrip(state.trips, activeId, (t) => ({ ...t, showConversions: action.value })),
-      };
-    case 'addTrip': {
-      const trip = createEmptyTrip();
-      return { ...state, trips: [...state.trips, trip], activeTripId: trip.id };
+    case 'setActiveTrip':
+      return { ...state, activeTripId: action.tripId };
+    case 'upsertJoinedTrip': {
+      const exists = state.joinedTrips.some((j) => j.tripId === action.tripId);
+      const joinedTrips: JoinedTrip[] = exists
+        ? state.joinedTrips.map((j) => (j.tripId === action.tripId ? { ...j, myTravelerId: action.myTravelerId } : j))
+        : [...state.joinedTrips, { tripId: action.tripId, myTravelerId: action.myTravelerId }];
+      return { ...state, joinedTrips, activeTripId: action.tripId };
     }
-    case 'deleteTrip': {
-      if (state.trips.length <= 1) return state; // always keep at least one trip
-      const trips = state.trips.filter((t) => t.id !== action.id);
-      const activeTripId = state.activeTripId === action.id ? trips[0].id : state.activeTripId;
-      return { ...state, trips, activeTripId };
+    case 'removeJoinedTrip': {
+      const joinedTrips = state.joinedTrips.filter((j) => j.tripId !== action.tripId);
+      const activeTripId = state.activeTripId === action.tripId ? joinedTrips[0]?.tripId ?? null : state.activeTripId;
+      return { ...state, joinedTrips, activeTripId };
     }
-    case 'switchTrip':
-      return state.trips.some((t) => t.id === action.id) ? { ...state, activeTripId: action.id } : state;
     default:
       return state;
   }
 }
 
+export type NewExpenseInput = Omit<Expense, 'id' | 'date'>;
+
+function reportError(err: unknown) {
+  const message = err instanceof Error ? err.message : 'Something went wrong.';
+  Alert.alert("Couldn't save changes", message + '\n\nCheck your internet connection and try again.');
+}
+
 interface TripContextValue {
-  state: TripState;
-  trips: Trip[];
-  activeTripId: string;
   hydrated: boolean;
+  state: TripState | null;
+  tripLoading: boolean;
+  tripError: string | null;
+  myTravelerId: string | null;
+  joinedTrips: JoinedTrip[];
+  activeTripId: string | null;
+  darkMode: boolean;
+
+  // Trip data mutations (act on the currently active trip)
   setTripName: (name: string) => void;
   setTripDates: (dates: string) => void;
   addTraveler: (name: string) => void;
@@ -158,33 +73,44 @@ interface TripContextValue {
   addExpense: (expense: NewExpenseInput) => void;
   toggleSettled: (id: string) => void;
   resetSettled: () => void;
-  restoreDefaults: () => void;
-  toggleDarkMode: () => void;
+  resetTrip: () => void;
   setEurRate: (value: number) => void;
   setGbpRate: (value: number) => void;
   setKwdRate: (value: number) => void;
   setShowConversions: (value: boolean) => void;
-  addTrip: () => void;
-  deleteTrip: (id: string) => void;
-  switchTrip: (id: string) => void;
+
+  // App-wide
+  toggleDarkMode: () => void;
+
+  // Trip membership
+  createTripAndJoin: (tripName: string, yourName: string) => Promise<string>;
+  previewTrip: (code: string) => Promise<Trip | null>;
+  joinExistingTraveler: (tripId: string, travelerId: string) => void;
+  joinAsNewTraveler: (tripId: string, travelers: Traveler[], name: string) => Promise<void>;
+  leaveTrip: (tripId: string) => void;
+  switchTrip: (tripId: string) => void;
 }
 
 const TripContext = createContext<TripContextValue | null>(null);
 
 export function TripProvider({ children }: { children: React.ReactNode }) {
-  const [appState, dispatch] = useReducer(reducer, undefined, defaultAppState);
-  const [hydrated, setHydrated] = React.useState(false);
+  const [local, dispatch] = useReducer(reducer, undefined, defaultLocalState);
+  const [hydrated, setHydrated] = useState(false);
   const loadedOnce = useRef(false);
+
+  const [trip, setTrip] = useState<Trip | null>(null);
+  const [tripLoading, setTripLoading] = useState(false);
+  const [tripError, setTripError] = useState<string | null>(null);
+  const tripRef = useRef<Trip | null>(null);
+  tripRef.current = trip;
 
   useEffect(() => {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(STORAGE_KEY);
         if (raw) {
-          const parsed = JSON.parse(raw) as Partial<AppState>;
-          if (parsed.trips && parsed.trips.length > 0 && parsed.activeTripId) {
-            dispatch({ type: 'hydrate', state: { ...defaultAppState(), ...parsed } as AppState });
-          }
+          const parsed = JSON.parse(raw) as Partial<LocalState>;
+          dispatch({ type: 'hydrate', state: { ...defaultLocalState(), ...parsed } });
         }
       } catch {
         // corrupt storage — fall back to defaults already in state
@@ -197,46 +123,117 @@ export function TripProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!loadedOnce.current) return;
-    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(appState)).catch(() => {});
-  }, [appState]);
+    AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(local)).catch(() => {});
+  }, [local]);
 
-  const activeTrip = useMemo(
-    () => appState.trips.find((t) => t.id === appState.activeTripId) ?? appState.trips[0],
-    [appState.trips, appState.activeTripId]
+  useEffect(() => {
+    if (!local.activeTripId) {
+      setTrip(null);
+      setTripLoading(false);
+      setTripError(null);
+      return;
+    }
+    setTripLoading(true);
+    setTripError(null);
+    const unsubscribe = subscribeToTrip(
+      local.activeTripId,
+      (t) => {
+        setTrip(t);
+        setTripLoading(false);
+        setTripError(t ? null : 'This trip could not be found. It may have been removed.');
+      },
+      (err) => {
+        setTripLoading(false);
+        setTripError(err.message || 'Could not load this trip. Check your internet connection.');
+      }
+    );
+    return unsubscribe;
+  }, [local.activeTripId]);
+
+  const myTravelerId = useMemo(
+    () => local.joinedTrips.find((j) => j.tripId === local.activeTripId)?.myTravelerId ?? null,
+    [local.joinedTrips, local.activeTripId]
   );
 
-  const state = useMemo<TripState>(
-    () => ({ ...activeTrip, darkMode: appState.darkMode }),
-    [activeTrip, appState.darkMode]
+  const state = useMemo<TripState | null>(
+    () => (trip ? { ...trip, darkMode: local.darkMode } : null),
+    [trip, local.darkMode]
   );
 
-  const value = useMemo<TripContextValue>(
-    () => ({
-      state,
-      trips: appState.trips,
-      activeTripId: appState.activeTripId,
+  const value = useMemo<TripContextValue>(() => {
+    function current(): Trip {
+      const t = tripRef.current;
+      if (!t) throw new Error('No active trip loaded yet.');
+      return t;
+    }
+
+    return {
       hydrated,
-      setTripName: (name: string) => dispatch({ type: 'setTripName', name }),
-      setTripDates: (dates: string) => dispatch({ type: 'setTripDates', dates }),
-      addTraveler: (name: string) => dispatch({ type: 'addTraveler', name }),
-      removeTraveler: (id: string) => dispatch({ type: 'removeTraveler', id }),
-      setCategoryBudget: (categoryId: string, value: number) =>
-        dispatch({ type: 'setCategoryBudget', categoryId, value }),
-      addExpense: (expense: NewExpenseInput) => dispatch({ type: 'addExpense', expense }),
-      toggleSettled: (id: string) => dispatch({ type: 'toggleSettled', id }),
-      resetSettled: () => dispatch({ type: 'resetSettled' }),
-      restoreDefaults: () => dispatch({ type: 'restoreDefaults' }),
+      state,
+      darkMode: local.darkMode,
+      tripLoading,
+      tripError,
+      myTravelerId,
+      joinedTrips: local.joinedTrips,
+      activeTripId: local.activeTripId,
+
+      setTripName: (name) => updateTripFields(current().id, { tripName: name }).catch(reportError),
+      setTripDates: (dates) => updateTripFields(current().id, { tripDates: dates }).catch(reportError),
+      addTraveler: (name) => {
+        const t = current();
+        addTravelerToTrip(t.id, name, t.travelers).catch(reportError);
+      },
+      removeTraveler: (id) => {
+        const t = current();
+        updateTripFields(t.id, { travelers: t.travelers.filter((tt) => tt.id !== id) }).catch(reportError);
+      },
+      setCategoryBudget: (categoryId, val) => {
+        const t = current();
+        updateTripFields(t.id, { categoryBudgets: { ...t.categoryBudgets, [categoryId]: val } }).catch(reportError);
+      },
+      addExpense: (expense) => {
+        const t = current();
+        addExpenseToTrip(t.id, expense, t.expenses).catch(reportError);
+      },
+      toggleSettled: (id) => {
+        const t = current();
+        const has = t.settledKeys.includes(id);
+        updateTripFields(t.id, {
+          settledKeys: has ? t.settledKeys.filter((k) => k !== id) : [...t.settledKeys, id],
+        }).catch(reportError);
+      },
+      resetSettled: () => {
+        updateTripFields(current().id, { settledKeys: [] }).catch(reportError);
+      },
+      resetTrip: () => {
+        updateTripFields(current().id, { categoryBudgets: zeroBudgets(), expenses: [], settledKeys: [] }).catch(
+          reportError
+        );
+      },
+      setEurRate: (v) => updateTripFields(current().id, { eurRate: v }).catch(reportError),
+      setGbpRate: (v) => updateTripFields(current().id, { gbpRate: v }).catch(reportError),
+      setKwdRate: (v) => updateTripFields(current().id, { kwdRate: v }).catch(reportError),
+      setShowConversions: (v) => updateTripFields(current().id, { showConversions: v }).catch(reportError),
+
       toggleDarkMode: () => dispatch({ type: 'toggleDarkMode' }),
-      setEurRate: (value: number) => dispatch({ type: 'setEurRate', value }),
-      setGbpRate: (value: number) => dispatch({ type: 'setGbpRate', value }),
-      setKwdRate: (value: number) => dispatch({ type: 'setKwdRate', value }),
-      setShowConversions: (value: boolean) => dispatch({ type: 'setShowConversions', value }),
-      addTrip: () => dispatch({ type: 'addTrip' }),
-      deleteTrip: (id: string) => dispatch({ type: 'deleteTrip', id }),
-      switchTrip: (id: string) => dispatch({ type: 'switchTrip', id }),
-    }),
-    [state, appState.trips, appState.activeTripId, hydrated]
-  );
+
+      createTripAndJoin: async (tripName, yourName) => {
+        const { tripId, travelerId } = await createTrip(tripName, yourName);
+        dispatch({ type: 'upsertJoinedTrip', tripId, myTravelerId: travelerId });
+        return tripId;
+      },
+      previewTrip: (code) => fetchTrip(code),
+      joinExistingTraveler: (tripId, travelerId) => {
+        dispatch({ type: 'upsertJoinedTrip', tripId, myTravelerId: travelerId });
+      },
+      joinAsNewTraveler: async (tripId, travelers, name) => {
+        const travelerId = await addTravelerToTrip(tripId, name, travelers);
+        dispatch({ type: 'upsertJoinedTrip', tripId, myTravelerId: travelerId });
+      },
+      leaveTrip: (tripId) => dispatch({ type: 'removeJoinedTrip', tripId }),
+      switchTrip: (tripId) => dispatch({ type: 'setActiveTrip', tripId }),
+    };
+  }, [hydrated, state, tripLoading, tripError, myTravelerId, local.joinedTrips, local.activeTripId, local.darkMode]);
 
   return <TripContext.Provider value={value}>{children}</TripContext.Provider>;
 }

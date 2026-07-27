@@ -12,6 +12,9 @@ interface UiContextValue {
   closeShare: () => void;
   expensesFilter: string;
   setExpensesFilter: (categoryId: string) => void;
+  showTripPicker: boolean;
+  openTripPicker: () => void;
+  closeTripPicker: () => void;
 }
 
 const UiContext = createContext<UiContextValue | null>(null);
@@ -21,6 +24,7 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
   const [showShareSheet, setShowShareSheet] = useState(false);
   const [shareMode, setShareMode] = useState<ShareMode>('balances');
   const [expensesFilter, setExpensesFilter] = useState('all');
+  const [showTripPicker, setShowTripPicker] = useState(false);
 
   const value = useMemo<UiContextValue>(
     () => ({
@@ -36,8 +40,11 @@ export function UiProvider({ children }: { children: React.ReactNode }) {
       closeShare: () => setShowShareSheet(false),
       expensesFilter,
       setExpensesFilter,
+      showTripPicker,
+      openTripPicker: () => setShowTripPicker(true),
+      closeTripPicker: () => setShowTripPicker(false),
     }),
-    [showAddSheet, showShareSheet, shareMode, expensesFilter]
+    [showAddSheet, showShareSheet, shareMode, expensesFilter, showTripPicker]
   );
 
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
