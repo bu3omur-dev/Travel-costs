@@ -43,15 +43,26 @@ export function ReportsScreen() {
 
         <Text style={[styles.sectionTitle, styles.spacedTitle, { color: c.text }]}>Spend by traveler</Text>
         <View style={styles.paidRows}>
-          {data.paidRows.map((p) => (
-            <View key={p.id} style={styles.paidRow}>
-              <View style={styles.rowHeader}>
-                <Text style={[styles.rowLabel, { color: c.text }]}>{p.name}</Text>
-                <Text style={[styles.rowAmount, { color: c.text }]}>{usd(p.amount)}</Text>
+          {data.paidRows.map((p) => {
+            const breakdown: string[] = [];
+            if (p.settledPaidOut > 0.5 || p.settledReceived > 0.5) {
+              breakdown.push('Paid for expenses ' + usd(p.expensePaid));
+            }
+            if (p.settledPaidOut > 0.5) breakdown.push('paid back ' + usd(p.settledPaidOut));
+            if (p.settledReceived > 0.5) breakdown.push('reimbursed ' + usd(p.settledReceived));
+            return (
+              <View key={p.id} style={styles.paidRow}>
+                <View style={styles.rowHeader}>
+                  <Text style={[styles.rowLabel, { color: c.text }]}>{p.name}</Text>
+                  <Text style={[styles.rowAmount, { color: c.text }]}>{usd(p.amount)}</Text>
+                </View>
+                <ProgressBar pct={p.pct} fillColor={c.neutral700} />
+                {breakdown.length ? (
+                  <Text style={[styles.breakdown, { color: c.neutral600 }]}>{breakdown.join(' · ')}</Text>
+                ) : null}
               </View>
-              <ProgressBar pct={p.pct} fillColor={c.neutral700} />
-            </View>
-          ))}
+            );
+          })}
         </View>
 
         <Text style={[styles.sectionTitle, styles.spacedTitle, { color: c.text }]}>Currency exposure</Text>
@@ -87,6 +98,7 @@ const styles = StyleSheet.create({
   marker: { position: 'absolute', top: 0, bottom: 0, right: 0, width: 2 },
   paidRows: { gap: 10, marginBottom: 24 },
   paidRow: {},
+  breakdown: { fontSize: fontSize.tiny, marginTop: 4 },
   table: { width: '100%' },
   tableHeaderRow: { flexDirection: 'row', borderBottomWidth: 2 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1 },

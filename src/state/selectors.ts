@@ -30,8 +30,11 @@ export interface TravelerBalance {
 export interface PaidRow {
   id: string;
   name: string;
-  amount: number;
+  amount: number; // net: expensePaid + settledPaidOut - settledReceived
   pct: number; // relative to the top payer, 0-100
+  expensePaid: number; // raw amount paid via logged expenses
+  settledPaidOut: number; // paid to someone else while settling up
+  settledReceived: number; // received from someone else settling up
 }
 
 export interface CurrencyRow {
@@ -130,19 +133,23 @@ export function computeTripData(state: TripState): TripData {
   const settlements = simplifySettlements(rawBalances);
 
   // Money marked settled reduces what the payer still owes and what the
-  // recipient is still owed — reflected in the balances people actually see
-  // (top of the Split tab), even though the underlying expense split is
-  // untouched. Also tracked per-payer so it can count toward their "paid"
-  // total on Reports, same as a logged expense would.
-  const settlementAdjustment: Record<string, number> = {};
-  const settledPaidByTraveler: Record<string, number> = {};
+  // recipient is still owed — reflected both in the balances people see at
+  // the top of the Split tab, and in each traveler's "paid" total on
+  // Reports: the payer's total goes up (they handed over real money) and
+  // the recipient's goes down (they've now been reimbursed for it), same
+  // net effect as the underlying expense split without touching it.
+  const settlementPaidOut: Record<string, number> = {};
+  const settlementReceived: Record<string, number> = {};
   settlements.forEach((s) => {
     if (Object.prototype.hasOwnProperty.call(state.settledPayments, s.id)) {
       const paidAmt = state.settledPayments[s.id] ?? s.amount;
-      settlementAdjustment[s.from.id] = (settlementAdjustment[s.from.id] ?? 0) + paidAmt;
-      settlementAdjustment[s.to.id] = (settlementAdjustment[s.to.id] ?? 0) - paidAmt;
-      settledPaidByTraveler[s.from.id] = (settledPaidByTraveler[s.from.id] ?? 0) + paidAmt;
+      settlementPaidOut[s.from.id] = (settlementPaidOut[s.from.id] ?? 0) + paidAmt;
+      settlementReceived[s.to.id] = (settlementReceived[s.to.id] ?? 0) + paidAmt;
     }
+  });
+  const settlementAdjustment: Record<string, number> = {};
+  state.travelers.forEach((t) => {
+    settlementAdjustment[t.id] = (settlementPaidOut[t.id] ?? 0) - (settlementReceived[t.id] ?? 0);
   });
   const balances: TravelerBalance[] = rawBalances.map((b) => ({
     ...b,
@@ -151,13 +158,22 @@ export function computeTripData(state: TripState): TripData {
 
   const paidTotalsRaw = state.travelers.map((t) => {
     const expensePaid = enriched.filter((e) => e.payerId === t.id).reduce((a, e) => a + e.amountUSD, 0);
-    return { id: t.id, name: t.name, amount: expensePaid + (settledPaidByTraveler[t.id] ?? 0) };
+    const settledPaidOut = settlementPaidOut[t.id] ?? 0;
+    const settledReceived = settlementReceived[t.id] ?? 0;
+    return {
+      id: t.id,
+      name: t.name,
+      amount: expensePaid + settledPaidOut - settledReceived,
+      expensePaid,
+      settledPaidOut,
+      settledReceived,
+    };
   });
   const maxPaid = Math.max(1, ...paidTotalsRaw.map((p) => p.amount));
   const paidRows: PaidRow[] = paidTotalsRaw
     .slice()
     .sort((a, b) => b.amount - a.amount)
-    .map((p) => ({ id: p.id, name: p.name, amount: p.amount, pct: (p.amount / maxPaid) * 100 }));
+    .map((p) => ({ ...p, pct: (p.amount / maxPaid) * 100 }));
 
   const currencyCodes: CurrencyCode[] = ['USD', 'EUR', 'GBP', 'KWD'];
   const currencyRows: CurrencyRow[] = currencyCodes
