@@ -116,7 +116,7 @@ export function computeTripData(state: TripState): TripData {
     };
   });
 
-  const balances: TravelerBalance[] = state.travelers.map((t) => {
+  const rawBalances: TravelerBalance[] = state.travelers.map((t) => {
     const paid = enriched.filter((e) => e.payerId === t.id).reduce((a, e) => a + e.amountUSD, 0);
     const owed = enriched
       .filter((e) => e.participantIds.includes(t.id))
@@ -124,16 +124,34 @@ export function computeTripData(state: TripState): TripData {
     return { id: t.id, name: t.name, initials: t.initials, net: paid - owed };
   });
 
-  const settlements = simplifySettlements(balances);
+  // The Settle/Undo list always acts on settlements computed from the raw,
+  // expense-only balances, so a settlement's id (and its Settle/Undo state)
+  // stays stable no matter what's already been marked paid.
+  const settlements = simplifySettlements(rawBalances);
 
-  // "Paid" totals include settlement payments the traveler has marked as
-  // settled (money they actually handed over), not just logged expenses.
+  // Money marked settled reduces what the payer still owes and what the
+  // recipient is still owed — reflected in the balances people actually see
+  // (top of the Split tab), even though the underlying expense split is
+  // untouched. Also tracked per-payer so it can count toward their "paid"
+  // total on Reports, same as a logged expense would.
+  const settlementAdjustment: Record<string, number> = {};
+  const settledPaidByTraveler: Record<string, number> = {};
+  settlements.forEach((s) => {
+    if (Object.prototype.hasOwnProperty.call(state.settledPayments, s.id)) {
+      const paidAmt = state.settledPayments[s.id] ?? s.amount;
+      settlementAdjustment[s.from.id] = (settlementAdjustment[s.from.id] ?? 0) + paidAmt;
+      settlementAdjustment[s.to.id] = (settlementAdjustment[s.to.id] ?? 0) - paidAmt;
+      settledPaidByTraveler[s.from.id] = (settledPaidByTraveler[s.from.id] ?? 0) + paidAmt;
+    }
+  });
+  const balances: TravelerBalance[] = rawBalances.map((b) => ({
+    ...b,
+    net: b.net + (settlementAdjustment[b.id] ?? 0),
+  }));
+
   const paidTotalsRaw = state.travelers.map((t) => {
     const expensePaid = enriched.filter((e) => e.payerId === t.id).reduce((a, e) => a + e.amountUSD, 0);
-    const settlementPaid = settlements
-      .filter((s) => s.from.id === t.id && Object.prototype.hasOwnProperty.call(state.settledPayments, s.id))
-      .reduce((a, s) => a + (state.settledPayments[s.id] ?? s.amount), 0);
-    return { id: t.id, name: t.name, amount: expensePaid + settlementPaid };
+    return { id: t.id, name: t.name, amount: expensePaid + (settledPaidByTraveler[t.id] ?? 0) };
   });
   const maxPaid = Math.max(1, ...paidTotalsRaw.map((p) => p.amount));
   const paidRows: PaidRow[] = paidTotalsRaw
